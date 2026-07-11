@@ -13,11 +13,14 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask
+from flask_wtf.csrf import CSRFProtect
 
 from database import init_db
 from routes import bp as main_bp
 
-# ── Application factory ──────────────────────────────────────────────────────
+csrf = CSRFProtect()
+
+# ── Application factory ─────────────────────────────────────────────────────────────────────
 
 def create_app(test_config=None):
     """
@@ -32,25 +35,30 @@ def create_app(test_config=None):
 
     app = Flask(__name__, template_folder=templates_dir)
 
-    # ── Default configuration ────────────────────────────────────────────────
+    # ── Default configuration ────────────────────────────────────────────────────────────────
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production"),
         DATABASE=os.path.join(os.path.dirname(__file__), "banking.db"),
         DEBUG=True,
+        # WTF_CSRF_ENABLED defaults to True; set False only in tests that need it.
+        WTF_CSRF_ENABLED=True,
     )
 
     if test_config is not None:
         app.config.update(test_config)
 
-    # ── Schema initialisation ────────────────────────────────────────────────
+    # ── CSRF protection ───────────────────────────────────────────────────────────────────
+    csrf.init_app(app)
+
+    # ── Schema initialisation ──────────────────────────────────────────────────────────────────
     db_path = app.config.get("DATABASE")
     with app.app_context():
         init_db(db_path if db_path != ":memory:" else db_path)
 
-    # ── Register blueprints ──────────────────────────────────────────────────
+    # ── Register blueprints ─────────────────────────────────────────────────────────────────
     app.register_blueprint(main_bp)
 
-    # ── Custom error handlers ────────────────────────────────────────────────
+    # ── Custom error handlers ───────────────────────────────────────────────────────────────
     @app.errorhandler(404)
     def page_not_found(e):
         from flask import render_template
@@ -61,7 +69,7 @@ def create_app(test_config=None):
         from flask import render_template
         return render_template("500.html"), 500
 
-    # ── Root redirect ────────────────────────────────────────────────────────
+    # ── Root redirect ──────────────────────────────────────────────────────────────────────
     @app.route("/")
     def index():
         from flask import redirect, url_for
@@ -70,7 +78,7 @@ def create_app(test_config=None):
     return app
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Entry point ─────────────────────────────────────────────────────────────────────────
 
 app = create_app()
 

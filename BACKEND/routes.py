@@ -34,7 +34,7 @@ bp = Blueprint("main", __name__)
 MAX_TRANSACTION = 1_000_000.00
 
 
-# ── /login ───────────────────────────────────────────────────────────────────
+# ── /login ───────────────────────────────────────────────────────────────────────────
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
@@ -67,7 +67,7 @@ def login():
     return render_template("login.html")
 
 
-# ── /logout ──────────────────────────────────────────────────────────────────
+# ── /logout ──────────────────────────────────────────────────────────────────────────
 
 @bp.route("/logout")
 def logout():
@@ -75,7 +75,7 @@ def logout():
     return redirect(url_for("main.login"))
 
 
-# ── /dashboard ───────────────────────────────────────────────────────────────
+# ── /dashboard ─────────────────────────────────────────────────────────────────────
 
 @bp.route("/dashboard")
 @login_required
@@ -89,7 +89,7 @@ def dashboard():
     )
 
 
-# ── /deposit ─────────────────────────────────────────────────────────────────
+# ── /deposit ─────────────────────────────────────────────────────────────────────────
 
 @bp.route("/deposit", methods=["GET", "POST"])
 @login_required
@@ -128,7 +128,7 @@ def deposit():
     return render_template("deposit.html")
 
 
-# ── /withdraw ────────────────────────────────────────────────────────────────
+# ── /withdraw ────────────────────────────────────────────────────────────────────────
 
 @bp.route("/withdraw", methods=["GET", "POST"])
 @login_required
@@ -150,15 +150,22 @@ def withdraw():
             flash("Amount must be greater than zero.", "error")
             return render_template("withdraw.html")
 
-        customer_id = get_current_user_id()
-        current_balance = models.get_balance(customer_id)
-
-        if amount > current_balance:
-            flash("Insufficient funds. Your current balance is £{:,.2f}.".format(current_balance), "error")
+        if amount > MAX_TRANSACTION:
+            flash("Amount exceeds the maximum withdrawal limit of £1,000,000.", "error")
             return render_template("withdraw.html")
 
-        new_balance = round(current_balance - amount, 2)
-        models.update_balance(customer_id, new_balance)
+        customer_id = get_current_user_id()
+
+        # Atomically deduct the amount only if balance is sufficient.
+        # This single UPDATE prevents the TOCTOU race condition where two
+        # concurrent requests could both pass a Python-level balance check
+        # and both commit, resulting in a negative balance (overdraft).
+        success = models.withdraw_atomic(customer_id, amount)
+        if not success:
+            flash("Insufficient funds.", "error")
+            return render_template("withdraw.html")
+
+        new_balance = models.get_balance(customer_id)
         models.log_transaction(customer_id, "withdrawal", amount)
 
         flash(f"£{amount:,.2f} withdrawn successfully. New balance: £{new_balance:,.2f}", "success")

@@ -8,6 +8,7 @@
     <div class="card shadow-sm">
       <div class="card-body p-4">
         <form method="POST" action="{{ url_for('main.withdraw') }}" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="mb-3">
             <label for="amount" class="form-label">Amount (£)</label>
             <input
