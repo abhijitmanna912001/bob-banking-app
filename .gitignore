@@ -1,0 +1,25 @@
+# Virtual environment
+venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# SQLite database (contains live data)
+BACKEND/banking.db
+*.db
+
+# Bob AI assistant config (contains secrets)
+.bob/
+
+# Test / build caches
+.pytest_cache/
+
+# Environment secrets
+.env
+
+# docs folder
+docs/
+
+# macOS
+.DS_Store
