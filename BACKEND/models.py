@@ -2,7 +2,7 @@
 models.py — Data-access functions.  All SQL lives here; route handlers never
             write queries directly.
 """
-from database import query
+from database import get_connection, query
 
 
 def get_customer_by_username(username: str, db_path=None):
@@ -36,6 +36,39 @@ def update_balance(customer_id: int, new_balance: float, db_path=None) -> None:
         (new_balance, customer_id),
         db_path=db_path,
     )
+
+
+def withdraw_atomic(customer_id: int, amount: float, db_path=None) -> bool:
+    """
+    Atomically deduct *amount* from the customer's balance in a single SQL
+    statement, guarded by a ``balance >= amount`` predicate.
+
+    Returns True if the withdrawal succeeded (rowcount == 1), or False if
+    the balance was insufficient at the moment the write was applied.
+
+    This eliminates the TOCTOU race that exists when a separate SELECT is
+    followed by a separate UPDATE — two concurrent requests can both pass a
+    Python-level balance check, then both commit, producing a negative balance.
+    Using a single conditional UPDATE the database enforces the constraint
+    atomically under its own write lock.
+    """
+    from database import DB_PATH
+    import sqlite3
+
+    path = db_path if db_path is not None else DB_PATH
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE customers SET balance = balance - ? "
+            "WHERE id = ? AND balance >= ?",
+            (amount, customer_id, amount),
+        )
+        conn.commit()
+        return cursor.rowcount == 1
+    finally:
+        conn.close()
 
 
 def log_transaction(
